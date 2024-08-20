@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
 from hmmlearn import hmm
-from sklearn.metrics import akaike_information_criterion as aic
 
-class FinancialDataProcessor:
+
+class HMMReturnsTask:
     def __init__(self, filepath, delimiter=";", date_threshold='2010-10-10', training_ratio=0.8):
         self.filepath = filepath
         self.delimiter = delimiter
@@ -157,3 +157,39 @@ class FinancialDataProcessor:
         plt.title('Cumulative Returns Comparison')
         plt.legend()
         plt.show()
+
+    def bic_general(selfl, likelihood_fn, k, X):
+        """
+        Calculates the Bayesian Information Criterion (BIC) using Gaussian HMM
+        :param likelihood_fn: Function. Takes input x and gives out the log likelihood
+        of the data under the fitted model
+        :param k: Number of parameters in the model
+        Number of states for Hidden Markov Model
+        Number of components for Gaussian Mixture Models
+        :param X: Data that is fit
+        :return: Bayesian Information Criterion
+        """
+        bic = np.log(len(X) * k - 2 * likelihood_fn(X))
+        return bic
+
+    def bic_hmmlearn(self, X):
+        lowest_bic = np.inf
+        bic = []
+        n_states_range = range(1, 7)
+
+        for n_components in n_states_range:
+            hmm_curr = hmm.GaussianHMM(n_components, covariance_type='diag')
+            hmm_curr.fit(X)
+
+            n_features = hmm_curr.n_features
+            free_parameters = 2 * (n_components * n_features) + n_components * (n_components-1) + (n_components-1)
+
+            bic_curr = self.bic_general(hmm_curr.score, free_parameters, X)
+            bic.append(bic_curr)
+
+            if bic_curr < lowest_bic:
+                lowest_bic = bic_curr
+            best_hmm = hmm_curr
+
+        return best_hmm, bic
+

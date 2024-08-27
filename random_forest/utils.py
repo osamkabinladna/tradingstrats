@@ -1,16 +1,17 @@
 import pandas as pd
 
 
-def split_dataset(df):
+def split_dataset(df, features = 12):
     """
     Splits dataset per ticker
     :param df: dataframe to be split
+    :param features: number of features for each ticker
     :return: list of dataframe split per ticker
     """
     tickerlist = []
-    num_features_per_ticker = 11  # Assuming each ticker has 11 features
+    num_features_per_ticker = features  # Assuming each ticker has 11 features
 
-    for i in range(27):  # Assuming there are 27 tickers
+    for i in range(int(len(df.columns) / features)):  # Assuming there are 27 tickers
         start = i * num_features_per_ticker
         end = start + num_features_per_ticker
 

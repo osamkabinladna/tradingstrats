@@ -1,7 +1,10 @@
 import pandas as pd
+import re
 
+def does_not_end_with_number(column_name):
+    return not re.search(r'\d$', column_name)
 
-def split_dataset(df, features = 12):
+def split_dataset(df):
     """
     Splits dataset per ticker
     :param df: dataframe to be split
@@ -9,6 +12,8 @@ def split_dataset(df, features = 12):
     :return: list of dataframe split per ticker
     """
     tickerlist = []
+    count = sum(does_not_end_with_number(col) for col in df.columns)
+    features = count
     num_features_per_ticker = features  # Assuming each ticker has 11 features
 
     for i in range(int(len(df.columns) / features)):  # Assuming there are 27 tickers

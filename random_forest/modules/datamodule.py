@@ -1,4 +1,5 @@
 import pandas as pd
+import re
 import os
 
 class ExcelDataloader:
@@ -34,6 +35,9 @@ class ExcelDataloader:
         # Calculate additional features
         self.calculate_covariates()
         self.calculate_delta()
+
+    def non_num_suffix(self, colname):
+        return not re.search(r'\d$', colname)
 
     def split_dataset(self, df):
         """

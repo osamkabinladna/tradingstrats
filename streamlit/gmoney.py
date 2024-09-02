@@ -1,6 +1,7 @@
 import streamlit as st
 import io
 import pandas as pd
+import pickle
 import joblib
 from sklearn.metrics import accuracy_score, classification_report
 import re
@@ -14,17 +15,17 @@ models_path = base_path / 'random_forest' / 'models'
 # Load the pre-trained model
 @st.cache_resource
 def load_model_and_data():
-    model = joblib.load(models_path / 'yuge.joblib')
-    valid_full = joblib.load(models_path / 'yuge_validfull.joblib')
-    x_valid = joblib.load(models_path / 'yuge_xvalid.joblib')
-    y_valid = joblib.load(models_path / 'yuge_yvalid.joblib')
-    return model, valid_full, x_valid, y_valid
+    # Access individual objects
+    model = joblib.load('../random_forest/models/yuge70.joblib')
+    x_valid = joblib.load('../random_forest/models/yuge70_xvalid.joblib')
+    y_valid = joblib.load('../random_forest/models/yuge70_yvalid.joblib')
+    valid_full = joblib.load('../random_forest/models/yuge70_validfull.joblib')
+    x_oob = joblib.load('../random_forest/models/yuge70_xoob.joblib')
+    y_oob = joblib.load('../random_forest/models/yuge70_yoob.joblib')
+    oob_full = joblib.load('../random_forest/models/yuge70_oobfull.joblib')
 
-@st.cache_resource
-def load_validation():
-    x_valid = joblib.load('../random_forest/models/bigmodel_xvalid.joblib')
-    y_valid = joblib.load('../random_forest/models/bigmodel_yvalid.joblib')
-    return x_valid, y_valid
+    return model, valid_full, x_valid, y_valid, oob_full, x_oob, y_oob
+
 
 def does_not_end_with_number(column_name):
     return not re.search(r'\d$', column_name)
@@ -76,7 +77,7 @@ def calculate_technical_indicators(df):
 
     return df
 
-def calculate_validation_stats(model, valid_full, x_valid, y_valid):
+def calculate_validation_stats(model, valid_full, x_valid, y_valid, plot=False):
     predicted = model.predict(x_valid)
     predicted_probs = model.predict_proba(x_valid)
 
@@ -96,37 +97,39 @@ def calculate_validation_stats(model, valid_full, x_valid, y_valid):
 
     stats_df = positive_preds.groupby('Probbin')['Returns'].agg(
         mean='mean',
-        median='median',
-        min='min',
-        max='max',
+        top_10=lambda x: x.quantile(0.9),
+        bottom_10=lambda x: x.quantile(0.1),
         std='std',
-        Winrate=lambda x: (x > 0).mean() * 100
+        count='size',
+        winrate=lambda x: (x > 0).mean() * 100
     ).reset_index()
 
+
     # Initialize the plot
-    fig = go.Figure()
+    if plot:
+        fig = go.Figure()
 
-    # Plot the PDF for each bin
-    for label in labels:
-        subset = positive_preds[positive_preds['Probbin'] == label]
-        if not subset.empty:
-            kde = subset['Returns'].plot.kde()
-            x = kde.get_lines()[0].get_xdata()
-            y = kde.get_lines()[0].get_ydata()
-            fig.add_trace(go.Scatter(x=x, y=y, mode='lines', fill='tozeroy', name=f'Prob Bin: {label}'))
-            kde.remove()
+        # Plot the PDF for each bin
+        for label in labels:
+            subset = positive_preds[positive_preds['Probbin'] == label]
+            if not subset.empty:
+                kde = subset['Returns'].plot.kde()
+                x = kde.get_lines()[0].get_xdata()
+                y = kde.get_lines()[0].get_ydata()
+                fig.add_trace(go.Scatter(x=x, y=y, mode='lines', fill='tozeroy', name=f'Prob Bin: {label}'))
+                kde.remove()
 
-    # Customize the layout
-    fig.update_layout(
-        title='PDF of Returns by Probability Bin',
-        xaxis_title='Return',
-        yaxis_title='Density',
-        template='plotly_dark',
-        legend_title_text='Probability Bins'
-    )
+        # Customize the layout
+        fig.update_layout(
+            title='PDF of Returns by Probability Bin',
+            xaxis_title='Return',
+            yaxis_title='Density',
+            template='plotly_dark',
+            legend_title_text='Probability Bins'
+        )
 
-    # Embed the plot in Streamlit
-    st.plotly_chart(fig)
+        # Embed the plot in Streamlit
+        st.plotly_chart(fig)
 
     return valid_data, stats_df
 
@@ -143,6 +146,14 @@ def plot_pdf_by_bin_plotly(positive_preds, bins, labels):
             fig.add_trace(go.Scatter(x=x, y=y, mode='lines', fill='tozeroy', name=f'Prob Bin: {label}'))
             kde.remove()
 
+    # Add a red vertical line at the 0 Returns mark
+    fig.add_shape(
+        type='line',
+        x0=0, y0=0, x1=0, y1=1,  # Vertical line at x=0, from y=0 to y=1
+        line=dict(color='red', width=2, dash='dash'),
+        xref='x', yref='paper'  # Use 'x' axis reference for x and 'paper' reference for y
+    )
+
     fig.update_layout(
         title='PDF of Returns by Probability Bin',
         xaxis_title='Return',
@@ -155,7 +166,10 @@ def plot_pdf_by_bin_plotly(positive_preds, bins, labels):
 
 def prepare_data(uploaded_file):
     file_content = uploaded_file.read()
+
+    # Use `on_bad_lines='skip'` to handle lines with an unexpected number of fields
     evaluation_data = pd.read_csv(io.BytesIO(file_content), skiprows=5, index_col='Dates')
+
     evaluation_data.index = pd.to_datetime(evaluation_data.index)
 
     evlist = split_dataset(evaluation_data)
@@ -192,9 +206,9 @@ def run_prediction(model, pred_data):
     return pred_nona.loc[:, ['Ticker', 'Predicted', 'Confidence']]
 
 def main():
-    st.title("G Money App 🔮💸")
+    st.image("title.png", use_column_width=True)
 
-    model, valid_full, x_valid, y_valid = load_model_and_data()
+    model, valid_full, x_valid, y_valid, oob_full, x_oob, y_oob = load_model_and_data()
 
     uploaded_file = st.file_uploader("Upload your CSV file for inference", type=["csv"])
 
@@ -204,10 +218,28 @@ def main():
 
         st.title("Predictions")
         positive_preds = predictions[predictions['Predicted'] == 1]
+        positive_preds.index = positive_preds.index.strftime('%d %B %Y')
         st.write(positive_preds.drop_duplicates(subset=['Confidence', 'Ticker']))
 
+    # Create columns for Out of Distribution and In Distribution Statistics
+    col1, col2 = st.columns(2)
 
-    st.title("Validation Statistics")
+    # Out of Distribution Validation Statistics
+    st.title("OOD Validation Statistics")
+    valid_data, stats_df = calculate_validation_stats(model, oob_full, x_oob, y_oob)
+    st.write("Statistics by Confidence Bin:")
+    st.write(stats_df)
+
+    y_pred = model.predict(x_oob)
+    st.write(f"Accuracy: {accuracy_score(y_oob, y_pred)}")
+
+    report_dict = classification_report(y_oob, y_pred, output_dict=True)
+    report_df = pd.DataFrame(report_dict).transpose()
+    st.write("Classification Report")
+    st.dataframe(report_df)
+
+    # In Distribution Validation Statistics
+    st.title("ID Validation Statistics")
     valid_data, stats_df = calculate_validation_stats(model, valid_full, x_valid, y_valid)
     st.write("Statistics by Confidence Bin:")
     st.write(stats_df)

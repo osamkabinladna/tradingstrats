@@ -14,17 +14,22 @@ models_path = base_path / 'random_forest' / 'models'
 
 # Load the pre-trained model
 @st.cache_resource
-def load_model_and_data():
+def load_model_and_data(v1=False):
     # Access individual objects
-    model = joblib.load('../random_forest/models/yuge70.joblib')
-    x_valid = joblib.load('../random_forest/models/yuge70_xvalid.joblib')
-    y_valid = joblib.load('../random_forest/models/yuge70_yvalid.joblib')
-    valid_full = joblib.load('../random_forest/models/yuge70_validfull.joblib')
-    x_oob = joblib.load('../random_forest/models/yuge70_xoob.joblib')
-    y_oob = joblib.load('../random_forest/models/yuge70_yoob.joblib')
-    oob_full = joblib.load('../random_forest/models/yuge70_oobfull.joblib')
+    datadict = joblib.load('../random_forest/models/dd_best.joblib')
+    model = datadict['model']
+    x_valid = datadict['x_valid']
+    y_valid = datadict['y_valid']
+    valid_full = datadict['x_validfull']
 
-    return model, valid_full, x_valid, y_valid, oob_full, x_oob, y_oob
+    if v1:
+        model = joblib.load('../random_forest/models/testini.joblib')
+        x_valid = joblib.load('../random_forest/models/yuge70_xoob.joblib')
+        y_valid = joblib.load('../random_forest/models/yuge70_yoob.joblib')
+        valid_full = joblib.load('../random_forest/models/yuge70_oobfull.joblib')
+
+
+    return model, valid_full, x_valid, y_valid
 
 
 def does_not_end_with_number(column_name):
@@ -49,6 +54,9 @@ def split_dataset(df):
     return tickerlist
 
 def calculate_technical_indicators(df):
+    df['TURNOVER'] = pd.to_numeric(df['TURNOVER'], errors='coerce')
+    df['PX_LAST'] = pd.to_numeric(df['PX_LAST'], errors='coerce')
+
     df['VOLUME'] = df['TURNOVER'] / df['PX_LAST']
     df['PCT_CHANGE_20'] = ((df['PX_LAST'].shift(-20) - df['PX_LAST']) / df['PX_LAST']) * 100
 
@@ -208,7 +216,7 @@ def run_prediction(model, pred_data):
 def main():
     st.image("title.png", use_column_width=True)
 
-    model, valid_full, x_valid, y_valid, oob_full, x_oob, y_oob = load_model_and_data()
+    model, valid_full, x_valid, y_valid = load_model_and_data(v1=False)
 
     uploaded_file = st.file_uploader("Upload your CSV file for inference", type=["csv"])
 
@@ -225,22 +233,22 @@ def main():
     col1, col2 = st.columns(2)
 
     # Out of Distribution Validation Statistics
-    st.title("OOD Validation Statistics")
-    valid_data, stats_df = calculate_validation_stats(model, oob_full, x_oob, y_oob)
-    st.write("Statistics by Confidence Bin:")
-    st.write(stats_df)
-
-    y_pred = model.predict(x_oob)
-    st.write(f"Accuracy: {accuracy_score(y_oob, y_pred)}")
-
-    report_dict = classification_report(y_oob, y_pred, output_dict=True)
-    report_df = pd.DataFrame(report_dict).transpose()
-    st.write("Classification Report")
-    st.dataframe(report_df)
+    # st.title("OOD Validation Statistics")
+    # valid_data, stats_df = calculate_validation_stats(model, oob_full, x_oob, y_oob)
+    # st.write("Statistics by Confidence Bin:")
+    # st.write(stats_df)
+    #
+    # y_pred = model.predict(x_oob)
+    # st.write(f"Accuracy: {accuracy_score(y_oob, y_pred)}")
+    #
+    # report_dict = classification_report(y_oob, y_pred, output_dict=True)
+    # report_df = pd.DataFrame(report_dict).transpose()
+    # st.write("Classification Report")
+    # st.dataframe(report_df)
 
     # In Distribution Validation Statistics
     st.title("ID Validation Statistics")
-    valid_data, stats_df = calculate_validation_stats(model, valid_full, x_valid, y_valid)
+    valid_data, stats_df = calculate_validation_stats(model, valid_full, x_valid, y_valid, plot=True)
     st.write("Statistics by Confidence Bin:")
     st.write(stats_df)
 
@@ -251,6 +259,8 @@ def main():
     report_df = pd.DataFrame(report_dict).transpose()
     st.write("Classification Report")
     st.dataframe(report_df)
+
+
 
 if __name__ == "__main__":
     main()

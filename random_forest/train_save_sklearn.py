@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, BaggingClassifier
 from imblearn.over_sampling import SMOTE, SVMSMOTE, BorderlineSMOTE, ADASYN, RandomOverSampler, KMeansSMOTE
 import joblib
 from sklearn.neighbors import NearestNeighbors
@@ -43,16 +43,18 @@ print(f'begin training for {x_train.columns}')
 # )
 
 model = RandomForestClassifier(
-    n_estimators=120,
-    max_depth=50,
+    n_estimators=300,
+    max_depth=35,
     min_samples_leaf=200,
     max_features='sqrt',
     min_samples_split=200,
-    bootstrap=False,
+    bootstrap=True,
+    min_weight_fraction_leaf=0.01,
     n_jobs=-1,
-    class_weight='balanced',
+    class_weight='balanced_subsample',
     random_state=420
 )
+
 if imba:
 
     # Applying ADASYN
@@ -113,5 +115,5 @@ model.fit(x_train, y_train)
 print('Fit completed')
 
 # Save the model
-joblib.dump(model, 'models/yuge70.joblib')
+joblib.dump(model, 'models/testini.joblib')
 print('Model Saved')
